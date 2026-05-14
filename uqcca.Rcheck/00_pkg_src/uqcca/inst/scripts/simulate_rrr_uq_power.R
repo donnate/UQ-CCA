@@ -1,43 +1,4 @@
-find_project_root <- function(start = getwd()) {
-  path <- normalizePath(start, mustWork = TRUE)
-
-  repeat {
-    helper_path <- file.path(path, "R", "cca_uq_methods.R")
-    if (file.exists(helper_path)) {
-      return(path)
-    }
-
-    parent <- dirname(path)
-    if (identical(parent, path)) {
-      stop("Could not find the project root containing R/cca_uq_methods.R.", call. = FALSE)
-    }
-    path <- parent
-  }
-}
-
-load_uqcca <- function(project_root) {
-  if (requireNamespace("uqcca", quietly = TRUE)) {
-    suppressPackageStartupMessages(library(uqcca))
-    return(invisible(TRUE))
-  }
-
-  if (!requireNamespace("pkgload", quietly = TRUE)) {
-    stop(
-      "Install the 'uqcca' package or the 'pkgload' package before running this example.",
-      call. = FALSE
-    )
-  }
-
-  pkgload::load_all(
-    project_root,
-    quiet = TRUE,
-    export_all = FALSE,
-    helpers = FALSE,
-    attach_testthat = FALSE
-  )
-
-  invisible(TRUE)
-}
+suppressPackageStartupMessages(library(uqcca))
 
 env_or_option <- function(env_name, option_name, default = NULL) {
   value <- Sys.getenv(env_name, unset = "")
@@ -52,14 +13,11 @@ env_or_option <- function(env_name, option_name, default = NULL) {
   as.character(value)[1]
 }
 
-project_root <- find_project_root()
-load_uqcca(project_root)
-
 ccar3_path <- env_or_option("UQCCA_CCAR3_PATH", "uqcca.ccar3_path")
 ccar3_code_path <- env_or_option("UQCCA_CCAR3_CODE_PATH", "uqcca.ccar3_code_path")
 output_dir <- Sys.getenv(
   "UQCCA_SIM_OUTPUT_DIR",
-  unset = file.path(project_root, "results", "simulation_rrr_uq")
+  unset = file.path(getwd(), "results", "simulation_rrr_uq")
 )
 
 n_sims <- as.integer(Sys.getenv("UQCCA_SIM_N_REPS", unset = "10"))
@@ -106,24 +64,8 @@ artifacts <- write_rrr_uq_simulation_reports(
   verbose = TRUE
 )
 
-cat("Simulation summary\n")
 print(simulation_results$summary$overall)
-cat("\nSubspace recovery summary\n")
 print(simulation_results$summary$subspace)
-cat("\nArtifacts\n")
-cat(sprintf("Outcomes: %s\n", artifacts$outcomes_csv))
-cat(sprintf("Summary: %s\n", artifacts$summary_csv))
-cat(sprintf("By component: %s\n", artifacts$component_csv))
-cat(sprintf("By replication: %s\n", artifacts$replication_csv))
-cat(sprintf("Power by strength: %s\n", artifacts$strength_csv))
-cat(sprintf("Subspace distances: %s\n", artifacts$subspace_csv))
-cat(sprintf("Subspace summary: %s\n", artifacts$subspace_summary_csv))
-cat(sprintf("Summary plot: %s\n", artifacts$summary_pdf))
-cat(sprintf("Power-by-strength plot: %s\n", artifacts$strength_pdf))
-cat(sprintf("Subspace-distance plot: %s\n", artifacts$subspace_pdf))
-
-if (interactive()) {
-  assign("rrr_uq_simulation_results", simulation_results, envir = .GlobalEnv)
-}
+print(artifacts)
 
 invisible(simulation_results)

@@ -1,0 +1,22 @@
+Package: uqcca
+Title: Uncertainty Quantification for Sparse Canonical Correlation
+        Analysis
+Version: 0.1.0
+Authors@R: 
+    person("Claire", "Donnat", , "cdonnat@uchicago.edu", role = c("aut", "cre"))
+Description: Fits sparse canonical correlation models through the external
+    ccar3 implementation and provides bootstrap- and cross-fitting-based
+    uncertainty quantification utilities. The package also includes
+    simulation helpers for benchmarking coverage, false discovery, and
+    subspace recovery in reduced-rank regression settings.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
+VignetteBuilder: knitr
+Imports: grDevices, methods, stats, utils
+Suggests: ccar3, CVR, ggplot2, glmnet, knitr, limma, pkgload, rmarkdown
+NeedsCompilation: no
+Packaged: 2026-05-14 02:53:28 UTC; clairedonnat
+Author: Claire Donnat [aut, cre]
+Maintainer: Claire Donnat <cdonnat@uchicago.edu>

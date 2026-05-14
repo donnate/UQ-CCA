@@ -1,56 +1,4 @@
-find_project_root <- function(start = getwd()) {
-  path <- normalizePath(start, mustWork = TRUE)
-
-  repeat {
-    helper_path <- file.path(path, "R", "cca_uq_methods.R")
-    if (file.exists(helper_path)) {
-      return(path)
-    }
-
-    parent <- dirname(path)
-    if (identical(parent, path)) {
-      stop("Could not find the project root containing R/cca_uq_methods.R.", call. = FALSE)
-    }
-    path <- parent
-  }
-}
-
-load_uqcca <- function(project_root) {
-  if (requireNamespace("uqcca", quietly = TRUE)) {
-    suppressPackageStartupMessages(library(uqcca))
-    return(invisible(TRUE))
-  }
-
-  if (!requireNamespace("pkgload", quietly = TRUE)) {
-    stop(
-      "Install the 'uqcca' package or the 'pkgload' package before running this example.",
-      call. = FALSE
-    )
-  }
-
-  pkgload::load_all(
-    project_root,
-    quiet = TRUE,
-    export_all = FALSE,
-    helpers = FALSE,
-    attach_testthat = FALSE
-  )
-
-  invisible(TRUE)
-}
-
-env_or_option <- function(env_name, option_name, default = NULL) {
-  value <- Sys.getenv(env_name, unset = "")
-  if (!nzchar(value)) {
-    value <- getOption(option_name, default = default)
-  }
-
-  if (is.null(value) || !length(value) || !nzchar(as.character(value)[1])) {
-    return(default)
-  }
-
-  as.character(value)[1]
-}
+suppressPackageStartupMessages(library(uqcca))
 
 parse_integer_values <- function(value, default) {
   if (missing(value) || !nzchar(value)) {
@@ -73,27 +21,14 @@ plot_q_sweep_subspace_summary <- function(subspace_summary, output_path) {
     stop("Package 'ggplot2' is required to draw q-sweep plots.", call. = FALSE)
   }
 
-  if (!nrow(subspace_summary)) {
-    stop("`subspace_summary` is empty.", call. = FALSE)
-  }
-
   plot_df <- subspace_summary
   plot_df$side <- factor(plot_df$side, levels = c("x", "y"), labels = c("X subspace", "Y subspace"))
-  side_has_path <- vapply(
-    split(plot_df$q, plot_df$side),
-    function(values) length(unique(values)) > 1L,
-    logical(1)
-  )
 
   plot_object <- ggplot2::ggplot(
     plot_df,
     ggplot2::aes(x = q, y = mean_subspace_distance, color = side)
-  )
-  if (any(side_has_path)) {
-    plot_object <- plot_object + ggplot2::geom_line(linewidth = 0.8)
-  }
-
-  plot_object <- plot_object +
+  ) +
+    ggplot2::geom_line(linewidth = 0.8) +
     ggplot2::geom_point(size = 2) +
     ggplot2::geom_errorbar(
       ggplot2::aes(
@@ -117,14 +52,24 @@ plot_q_sweep_subspace_summary <- function(subspace_summary, output_path) {
   invisible(output_path)
 }
 
-project_root <- find_project_root()
-load_uqcca(project_root)
+env_or_option <- function(env_name, option_name, default = NULL) {
+  value <- Sys.getenv(env_name, unset = "")
+  if (!nzchar(value)) {
+    value <- getOption(option_name, default = default)
+  }
+
+  if (is.null(value) || !length(value) || !nzchar(as.character(value)[1])) {
+    return(default)
+  }
+
+  as.character(value)[1]
+}
 
 ccar3_path <- env_or_option("UQCCA_CCAR3_PATH", "uqcca.ccar3_path")
 ccar3_code_path <- env_or_option("UQCCA_CCAR3_CODE_PATH", "uqcca.ccar3_code_path")
 output_dir <- Sys.getenv(
   "UQCCA_SIM_Q_SWEEP_OUTPUT_DIR",
-  unset = file.path(project_root, "results", "simulation_rrr_uq_by_q")
+  unset = file.path(getwd(), "results", "simulation_rrr_uq_by_q")
 )
 
 n_sims <- as.integer(Sys.getenv("UQCCA_SIM_N_REPS", unset = "10"))
@@ -145,15 +90,12 @@ lambdas <- 10^seq(-3, 0, length.out = 10)
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
 simulation_results_by_q <- vector("list", length(q_values))
-artifacts_by_q <- vector("list", length(q_values))
 combined_summary <- vector("list", length(q_values))
 combined_subspace <- vector("list", length(q_values))
 combined_subspace_summary <- vector("list", length(q_values))
-artifact_rows <- vector("list", length(q_values))
 
 for (index in seq_along(q_values)) {
   q_value <- q_values[[index]]
-  cat(sprintf("\nRunning q=%d (%d/%d)\n", q_value, index, length(q_values)))
 
   simulation_results_by_q[[index]] <- run_rrr_uq_simulation(
     n_sims = n_sims,
@@ -178,77 +120,34 @@ for (index in seq_along(q_values)) {
     verbose = TRUE
   )
 
-  q_output_dir <- file.path(output_dir, sprintf("q_%03d", q_value))
-  artifacts_by_q[[index]] <- write_rrr_uq_simulation_reports(
-    simulation_results = simulation_results_by_q[[index]],
-    output_dir = q_output_dir,
-    verbose = TRUE
-  )
-
   combined_summary[[index]] <- cbind(q = q_value, simulation_results_by_q[[index]]$summary$overall)
   combined_subspace[[index]] <- cbind(q = q_value, simulation_results_by_q[[index]]$subspace)
   combined_subspace_summary[[index]] <- cbind(q = q_value, simulation_results_by_q[[index]]$summary$subspace)
-  artifact_rows[[index]] <- data.frame(
-    q = q_value,
-    output_dir = q_output_dir,
-    summary_csv = artifacts_by_q[[index]]$summary_csv,
-    subspace_csv = artifacts_by_q[[index]]$subspace_csv,
-    subspace_summary_csv = artifacts_by_q[[index]]$subspace_summary_csv,
-    stringsAsFactors = FALSE
-  )
 }
 
 combined_summary_df <- do.call(rbind, combined_summary)
 combined_subspace_df <- do.call(rbind, combined_subspace)
 combined_subspace_summary_df <- do.call(rbind, combined_subspace_summary)
-artifact_table <- do.call(rbind, artifact_rows)
 
 summary_csv <- file.path(output_dir, "simulation_q_sweep_ci_summary.csv")
 subspace_csv <- file.path(output_dir, "simulation_q_sweep_subspace_distance.csv")
 subspace_summary_csv <- file.path(output_dir, "simulation_q_sweep_subspace_distance_summary.csv")
-artifact_csv <- file.path(output_dir, "simulation_q_sweep_artifacts.csv")
 subspace_pdf <- file.path(output_dir, "simulation_q_sweep_subspace_distance.pdf")
 
 utils::write.csv(combined_summary_df, summary_csv, row.names = FALSE)
 utils::write.csv(combined_subspace_df, subspace_csv, row.names = FALSE)
 utils::write.csv(combined_subspace_summary_df, subspace_summary_csv, row.names = FALSE)
-utils::write.csv(artifact_table, artifact_csv, row.names = FALSE)
 plot_q_sweep_subspace_summary(combined_subspace_summary_df, subspace_pdf)
 
-cat("\nQ sweep CI summary\n")
 print(combined_summary_df)
-cat("\nQ sweep subspace summary\n")
 print(combined_subspace_summary_df)
-cat("\nArtifacts\n")
-cat(sprintf("Combined summary: %s\n", summary_csv))
-cat(sprintf("Combined subspace distances: %s\n", subspace_csv))
-cat(sprintf("Combined subspace summary: %s\n", subspace_summary_csv))
-cat(sprintf("Per-q artifact index: %s\n", artifact_csv))
-cat(sprintf("Subspace-distance comparison plot: %s\n", subspace_pdf))
-
-if (interactive()) {
-  assign(
-    "rrr_uq_q_sweep_results",
-    list(
-      q_values = q_values,
-      runs = simulation_results_by_q,
-      artifacts = artifacts_by_q,
-      combined_summary = combined_summary_df,
-      combined_subspace = combined_subspace_df,
-      combined_subspace_summary = combined_subspace_summary_df
-    ),
-    envir = .GlobalEnv
-  )
-}
 
 invisible(
   list(
     q_values = q_values,
     runs = simulation_results_by_q,
-    artifacts = artifacts_by_q,
     combined_summary = combined_summary_df,
     combined_subspace = combined_subspace_df,
-    combined_subspace_summary = combined_subspace_summary_df,
-    artifact_table = artifact_table
+    combined_subspace_summary = combined_subspace_summary_df
   )
 )

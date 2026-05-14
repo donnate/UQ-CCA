@@ -1,0 +1,52 @@
+aggregate_pvalues_cauchy
+                        Aggregate p-values with the Cauchy combination
+                        rule.
+bootstrap_cca_uq        Bootstrap uncertainty quantification for sparse
+                        CCA loadings
+build_bootstrap_correlation_table
+                        Summarize bootstrap uncertainty for canonical
+                        correlations
+build_bootstrap_loading_table_all
+                        Summarize bootstrap loading uncertainty for
+                        every feature and component
+compare_uq_methods      Compare bootstrap and cross-fitted uncertainty
+                        summaries
+crossfit_cca_conditional_inference
+                        Cross-fitted conditional regression for sparse
+                        CCA
+crossfit_cca_inference
+                        Cross-fitted score-loading regression with
+                        Cauchy-combined p-values
+crossfit_cca_marginal_inference
+                        Cross-fitted marginal feature-score regression
+                        for sparse CCA
+fit_cca_rrr_cv          Backward-compatible alias for 'fit_ecca_cv()'.
+fit_cca_rrr_fixed_lambda
+                        Backward-compatible alias for
+                        'fit_ecca_fixed_lambda()'.
+fit_ecca_cv             Fit sparse CCA with cross-validated
+                        'ccar3::ecca'
+fit_ecca_fixed_lambda   Fit sparse CCA with a fixed 'ccar3::ecca'
+                        penalty
+generate_rrr_simulation_data
+                        Generate synthetic reduced-rank regression data
+                        for UQ benchmarking
+load_alcohol_example    Load the alcohol multi-omics example.
+print_alcohol_uq_summary
+                        Print a concise summary for
+                        'run_alcohol_uq_comparison()'
+run_alcohol_uq_comparison
+                        Run the alcohol example end-to-end
+run_rrr_uq_simulation   Run the reduced-rank regression simulation
+                        benchmark
+summarize_bootstrap_subspace
+                        Summarize bootstrap uncertainty for a block of
+                        canonical components
+write_bootstrap_loading_reports
+                        Write CSV and PDF bootstrap reports
+write_crossfit_loading_reports
+                        Write CSV and PDF cross-fitted inference
+                        reports
+write_rrr_uq_simulation_reports
+                        Write CSV and PDF reports for a simulation
+                        benchmark

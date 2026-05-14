@@ -1,0 +1,206 @@
+---
+title: "Getting Started with uqcca"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting Started with uqcca}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
+```
+
+`uqcca` packages the sparse CCA uncertainty-quantification workflows developed
+in this repository so they can be shared with collaborators as a conventional R
+package. The package keeps the original `ccar3` fitting backend, then adds
+three uncertainty summaries:
+
+1. Bootstrap uncertainty for the sparse CCA loadings and canonical
+   correlations.
+2. Cross-fitted conditional regression for variables associated with the
+   opposite-view canonical score after adjusting for the remaining features.
+3. Cross-fitted marginal feature-score regression for cross-loadings or
+   structure coefficients.
+
+The package also includes simulation helpers for benchmarking coverage, false
+discovery, power, and subspace recovery.
+
+# Installation
+
+Install the package from a local checkout:
+
+```{r}
+devtools::install("/path/to/UQ-CCA")
+```
+
+The sparse CCA fitting functions expect access to `ccar3`. You can either
+install `ccar3` as a package or point `uqcca` to a local source checkout:
+
+```{r}
+options(uqcca.ccar3_path = "/path/to/ccar3")
+```
+
+or equivalently:
+
+```{r}
+Sys.setenv(UQCCA_CCAR3_PATH = "/path/to/ccar3")
+```
+
+The simulation helpers additionally use the external `CCAR3_code` repository:
+
+```{r}
+options(uqcca.ccar3_code_path = "/path/to/CCAR3_code")
+```
+
+# Alcohol Example
+
+The alcohol multi-omics example can be loaded either from the `CVR` package or
+from a local `.rda` file:
+
+```{r}
+library(uqcca)
+
+alcohol <- load_alcohol_example()
+str(alcohol, max.level = 1)
+```
+
+Fit sparse CCA with cross-validated `ecca`:
+
+```{r}
+fit <- fit_ecca_cv(
+  X = alcohol$X,
+  Y = alcohol$Y,
+  r = 2,
+  lambdas = c(0.005, 0.01, 0.02, 0.05, 0.1, 0.2),
+  kfolds = 5,
+  preprocess_mode = "center"
+)
+```
+
+# Bootstrap UQ
+
+Bootstrap resampling refits the sparse CCA pipeline, aligns each replicate back
+to the reference fit, and summarizes loading uncertainty:
+
+```{r}
+boot <- bootstrap_cca_uq(
+  X = alcohol$X,
+  Y = alcohol$Y,
+  reference_fit = fit,
+  B = 50,
+  seed = 2025,
+  refit_mode = "fixed_lambda"
+)
+
+gene_boot <- build_bootstrap_loading_table_all(boot, side = "x")
+meth_boot <- build_bootstrap_loading_table_all(boot, side = "y")
+rho_boot <- build_bootstrap_correlation_table(boot)
+subspace_boot <- summarize_bootstrap_subspace(boot, components = 1:2)
+```
+
+For collaborator-ready artifacts:
+
+```{r}
+write_bootstrap_loading_reports(
+  results = list(bootstrap = boot),
+  output_dir = "results/alcohol_bootstrap"
+)
+```
+
+# Cross-Fitted Regression UQ
+
+The legacy Cauchy-combination workflow remains available:
+
+```{r}
+crossfit <- crossfit_cca_inference(
+  X = alcohol$X,
+  Y = alcohol$Y,
+  reference_fit = fit,
+  K = 5,
+  seed = 2026,
+  variance_shrinkage = "james-stein"
+)
+```
+
+The marginal and conditional estimators target different inferential questions:
+
+```{r}
+marginal <- crossfit_cca_marginal_inference(
+  X = alcohol$X,
+  Y = alcohol$Y,
+  reference_fit = fit,
+  K = 5,
+  seed = 2026
+)
+
+conditional <- crossfit_cca_conditional_inference(
+  X = alcohol$X,
+  Y = alcohol$Y,
+  reference_fit = fit,
+  K = 5,
+  seed = 2026,
+  method = "auto"
+)
+```
+
+The high-level wrapper runs the full alcohol workflow in one call:
+
+```{r}
+results <- run_alcohol_uq_comparison(
+  n_boot = 25,
+  K = 5,
+  preprocess_mode = "center"
+)
+
+print_alcohol_uq_summary(results)
+```
+
+# Simulation Benchmark
+
+The package includes reduced-rank regression simulations with known ground
+truth. This is useful for reporting coverage, power, false discovery rates, and
+subspace recovery:
+
+```{r}
+sim <- run_rrr_uq_simulation(
+  n_sims = 20,
+  n = 500,
+  p = 100,
+  q = 20,
+  r = 2,
+  nnzeros = 10,
+  n_boot = 25,
+  K = 2,
+  preprocess_mode = "center"
+)
+
+sim$summary$overall
+sim$summary$subspace
+```
+
+To write the benchmark tables and plots:
+
+```{r}
+write_rrr_uq_simulation_reports(
+  simulation_results = sim,
+  output_dir = "results/simulation_rrr_uq"
+)
+```
+
+# Installed Scripts
+
+If you want collaborators to run the packaged workflows as standalone scripts,
+they are installed under:
+
+```{r}
+system.file("scripts", package = "uqcca")
+```
+
+Those scripts correspond to:
+
+- `sparse_cca_alcohol.R`
+- `simulate_rrr_uq_power.R`
+- `simulate_rrr_uq_by_q.R`
+
+They honor the same `UQCCA_*` environment variables documented above.

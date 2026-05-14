@@ -1,43 +1,4 @@
-find_project_root <- function(start = getwd()) {
-  path <- normalizePath(start, mustWork = TRUE)
-
-  repeat {
-    helper_path <- file.path(path, "R", "cca_uq_methods.R")
-    if (file.exists(helper_path)) {
-      return(path)
-    }
-
-    parent <- dirname(path)
-    if (identical(parent, path)) {
-      stop("Could not find the project root containing R/cca_uq_methods.R.", call. = FALSE)
-    }
-    path <- parent
-  }
-}
-
-load_uqcca <- function(project_root) {
-  if (requireNamespace("uqcca", quietly = TRUE)) {
-    suppressPackageStartupMessages(library(uqcca))
-    return(invisible(TRUE))
-  }
-
-  if (!requireNamespace("pkgload", quietly = TRUE)) {
-    stop(
-      "Install the 'uqcca' package or the 'pkgload' package before running this example.",
-      call. = FALSE
-    )
-  }
-
-  pkgload::load_all(
-    project_root,
-    quiet = TRUE,
-    export_all = FALSE,
-    helpers = FALSE,
-    attach_testthat = FALSE
-  )
-
-  invisible(TRUE)
-}
+suppressPackageStartupMessages(library(uqcca))
 
 env_or_option <- function(env_name, option_name, default = NULL) {
   value <- Sys.getenv(env_name, unset = "")
@@ -52,9 +13,6 @@ env_or_option <- function(env_name, option_name, default = NULL) {
   as.character(value)[1]
 }
 
-project_root <- find_project_root()
-load_uqcca(project_root)
-
 parse_variance_shrinkage_methods <- function(value) {
   methods <- trimws(strsplit(value, ",", fixed = TRUE)[[1]])
   methods <- methods[nzchar(methods)]
@@ -62,7 +20,7 @@ parse_variance_shrinkage_methods <- function(value) {
     methods <- "james-stein"
   }
 
-  unique(vapply(methods, match_variance_shrinkage, character(1)))
+  unique(methods)
 }
 
 ccar3_path <- env_or_option("UQCCA_CCAR3_PATH", "uqcca.ccar3_path")
@@ -74,14 +32,9 @@ variance_shrinkage_methods <- parse_variance_shrinkage_methods(
 )
 output_dir <- Sys.getenv(
   "UQCCA_OUTPUT_DIR",
-  unset = file.path(project_root, "results", "alcohol_uq")
+  unset = file.path(getwd(), "results", "alcohol_uq")
 )
 
-api <- get_ccar3_api(
-  ccar3_path = ccar3_path,
-  prefer_source = TRUE,
-  quiet = FALSE
-)
 data <- load_alcohol_example()
 fit <- fit_ecca_cv(
   X = data$X,
@@ -90,7 +43,6 @@ fit <- fit_ecca_cv(
   lambdas = c(0.005, 0.01, 0.02, 0.05, 0.1, 0.2),
   kfolds = 5,
   preprocess_mode = "center",
-  ccar3_api = api,
   ccar3_path = ccar3_path,
   prefer_source = TRUE,
   parallelize = FALSE,
@@ -103,7 +55,6 @@ bootstrap <- bootstrap_cca_uq(
   B = n_boot,
   seed = 2025,
   refit_mode = "fixed_lambda",
-  ccar3_api = api,
   progress = TRUE
 )
 
@@ -126,13 +77,9 @@ crossfit_artifacts <- list()
 crossfit_failures <- list()
 
 for (method in variance_shrinkage_methods) {
-  variant_label <- variance_shrinkage_label(method)
-  variant_dir <- file.path(
-    output_dir,
-    paste0("crossfit_", sanitize_path_label(method))
-  )
+  variant_dir <- file.path(output_dir, paste0("crossfit_", gsub("[^A-Za-z0-9]+", "_", method)))
 
-  message(sprintf("Running cross-fit inference with %s.", variant_label))
+  message(sprintf("Running cross-fit inference with %s.", method))
   crossfit_result <- tryCatch(
     crossfit_cca_inference(
       X = data$X,
@@ -142,7 +89,6 @@ for (method in variance_shrinkage_methods) {
       seed = 2026,
       alpha = 0.05,
       fit_mode = "fixed_lambda",
-      ccar3_api = api,
       progress = TRUE,
       variance_shrinkage = method
     ),
@@ -151,10 +97,7 @@ for (method in variance_shrinkage_methods) {
 
   if (inherits(crossfit_result, "error")) {
     crossfit_failures[[method]] <- conditionMessage(crossfit_result)
-    warning(
-      sprintf("Skipping %s: %s", variant_label, conditionMessage(crossfit_result)),
-      call. = FALSE
-    )
+    warning(sprintf("Skipping %s: %s", method, conditionMessage(crossfit_result)), call. = FALSE)
     next
   }
 
@@ -162,15 +105,15 @@ for (method in variance_shrinkage_methods) {
     data = data,
     fit = fit,
     bootstrap = bootstrap,
-    crossfit = crossfit_result
-  )
-  variant_results$comparison <- compare_uq_methods(
-    reference_fit = fit,
-    bootstrap_result = bootstrap,
-    crossfit_result = crossfit_result,
-    component = 1,
-    top_n = 10,
-    alpha = 0.05
+    crossfit = crossfit_result,
+    comparison = compare_uq_methods(
+      reference_fit = fit,
+      bootstrap_result = bootstrap,
+      crossfit_result = crossfit_result,
+      component = 1,
+      top_n = 10,
+      alpha = 0.05
+    )
   )
 
   crossfit_variants[[method]] <- crossfit_result
@@ -193,7 +136,6 @@ variant_summary <- do.call(rbind, lapply(successful_methods, function(method) {
   crossfit_result <- crossfit_variants[[method]]
   data.frame(
     variance_shrinkage = method,
-    label = variance_shrinkage_label(method),
     significant_gene = sum(crossfit_result$x_results$significant, na.rm = TRUE),
     significant_methylation = sum(crossfit_result$y_results$significant, na.rm = TRUE),
     mean_fold_correlation = mean(crossfit_result$fold_correlations, na.rm = TRUE),
@@ -222,43 +164,6 @@ results <- list(
 )
 
 print_alcohol_uq_summary(results, top_n = 10)
-cat("\nCross-fit shrinkage comparison\n")
 print(variant_summary)
-
-cat("\nFull coefficient CI reports\n")
-cat(sprintf("Gene coefficient CIs: %s\n", artifacts$gene_csv))
-cat(sprintf("Methylation coefficient CIs: %s\n", artifacts$methylation_csv))
-cat(sprintf("Gene CI plots: %s\n", artifacts$gene_pdf))
-cat(sprintf("Methylation CI plots: %s\n", artifacts$methylation_pdf))
-cat(sprintf("Cross-fit comparison summary: %s\n", variant_summary_csv))
-
-for (method in successful_methods) {
-  variant_label <- variance_shrinkage_label(method)
-  variant_artifacts <- crossfit_artifacts[[method]]
-  cat(sprintf("\n%s\n", variant_label))
-  cat(sprintf("Cross-fit gene regression CIs: %s\n", variant_artifacts$gene_csv))
-  cat(sprintf("Cross-fit methylation regression CIs: %s\n", variant_artifacts$methylation_csv))
-  cat(sprintf("Cross-fit gene CI plots: %s\n", variant_artifacts$gene_pdf))
-  cat(sprintf("Cross-fit methylation CI plots: %s\n", variant_artifacts$methylation_pdf))
-  cat(sprintf("Cross-fit variance diagnostics: %s\n", variant_artifacts$variance_csv))
-  cat(sprintf("Cross-fit variance diagnostic plot: %s\n", variant_artifacts$variance_pdf))
-  cat(sprintf("Cross-fit alignment diagnostics: %s\n", variant_artifacts$alignment_csv))
-  cat(sprintf("Cross-fit preprocess diagnostics: %s\n", variant_artifacts$preprocess_csv))
-}
-
-if (length(crossfit_failures)) {
-  cat("\nSkipped cross-fit variants\n")
-  for (method in names(crossfit_failures)) {
-    cat(sprintf(
-      "%s: %s\n",
-      variance_shrinkage_label(method),
-      crossfit_failures[[method]]
-    ))
-  }
-}
-
-if (interactive()) {
-  assign("alcohol_uq_results", results, envir = .GlobalEnv)
-}
 
 invisible(results)
